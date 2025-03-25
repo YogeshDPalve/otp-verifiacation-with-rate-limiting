@@ -1,9 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
-import redis from "../utils/redis";
 
+import redis from "../utils/redis";
+import sendOtp from "../utils/twilio";
+// prisma
 const prisma = new PrismaClient();
-const generateOtp = async (req: Request, res: Response) => {
+
+const registerUser = async (req: Request, res: Response) => {
   try {
     const { MobileNo } = req.body;
 
@@ -24,17 +27,10 @@ const generateOtp = async (req: Request, res: Response) => {
       },
     });
     console.log("user created:", createUser);
-    // Genetating otp
-    const otp = Math.floor(100000 + Math.random() * 900000);
-
-    // Store OTP in Redis with an expiry of 10 minutes
-    await redis.set(MobileNo, otp, "EX", 600);
-    const result = await redis.get(MobileNo);
-    console.log(`Stored OTP: ${result}`);
 
     res.status(200).send({
       success: true,
-      message: "User created and OTP send Successfully",
+      message: "User created Successfully",
     });
     return;
   } catch (error) {
@@ -47,8 +43,9 @@ const generateOtp = async (req: Request, res: Response) => {
   }
 };
 
-const resendOtp = async (req: Request, res: Response): Promise<any> => {
+const generateOtp = async (req: Request, res: Response): Promise<any> => {
   try {
+    const tokenExpiryTime = process.env.TOKEN_EXPIRY_TIME as string;
     const { MobileNo } = req.body;
 
     const existingUser = await prisma.user.findFirst({ where: { MobileNo } });
@@ -62,15 +59,12 @@ const resendOtp = async (req: Request, res: Response): Promise<any> => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store or update the OTP in Redis with a fresh 10-minute expiry
-    await redis.set(MobileNo, otp, "EX", 600);
+    await redis.set(MobileNo, otp, "EX", tokenExpiryTime);
     const result = await redis.get(MobileNo);
     console.log(`Stored OTP: ${result}`);
 
-    return res.status(200).send({
-      success: true,
-      message: "OTP resent successfully",
-      otp: otp,
-    });
+    // send otp to user via sms
+    sendOtp(otp, MobileNo, tokenExpiryTime, res);
   } catch (error) {
     console.error("Error resending OTP:", error);
     return res.status(500).send({
@@ -89,6 +83,14 @@ const verifyOtp = async (req: Request, res: Response): Promise<any> => {
       return res.status(400).send({
         success: false,
         message: "Mobile No and OTP are required",
+      });
+    }
+
+    const existingUser = await prisma.user.findFirst({ where: { MobileNo } });
+    if (!existingUser) {
+      return res.status(400).send({
+        success: false,
+        message: "User not exists please register your mobile number first",
       });
     }
 
@@ -127,10 +129,18 @@ const verifyOtp = async (req: Request, res: Response): Promise<any> => {
 
     // OTP is correct, delete it from Redis
     await redis.del(MobileNo);
-
+    const verified = await prisma.user.update({
+      where: {
+        MobileNo,
+      },
+      data: {
+        isVerified: true,
+      },
+    });
     return res.status(200).send({
       success: true,
       message: "OTP verified successfully",
+      verified,
     });
   } catch (error) {
     console.error("Error verifying OTP:", error);
@@ -141,4 +151,4 @@ const verifyOtp = async (req: Request, res: Response): Promise<any> => {
     });
   }
 };
-export { generateOtp, resendOtp, verifyOtp };
+export { generateOtp, registerUser, verifyOtp };

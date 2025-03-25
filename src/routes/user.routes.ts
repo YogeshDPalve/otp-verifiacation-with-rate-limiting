@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   generateOtp,
-  resendOtp,
+  registerUser,
   verifyOtp,
 } from "../controllers/user.controller";
 import {
@@ -9,23 +9,33 @@ import {
   validateRegistration,
 } from "../middlewares/validationMiddleware";
 import { ValidationChain } from "express-validator";
-import { cooldownTime, otpLimiter } from "../middlewares/rateLimiter";
+import {
+  cooldownTime,
+  otpLimiter,
+  verifyOtpLimiter,
+} from "../middlewares/rateLimiter";
 
 const router: Router = Router();
 
 router.post(
-  "/generate",
+  "/register",
   validateRegistration as ValidationChain[],
+  registerUser
+);
+
+router.post(
+  "/generate-otp",
+  validateRegistration as ValidationChain[],
+  cooldownTime, // cool down time for 2 min
+  otpLimiter, // rate limiter 5 request per 5 min
   generateOtp
 );
 
 router.post(
-  "/regenerate",
-  validateRegistration as ValidationChain[],
-  cooldownTime,
-  otpLimiter,
-  resendOtp
+  "/verify",
+  verifyOtpLimiter,
+  validateOtp as ValidationChain[],
+  verifyOtp
 );
-router.post("/verify", validateOtp as ValidationChain[], verifyOtp);
 
 export default router;
