@@ -18,6 +18,7 @@ const validateRegistration = [
         message: "Error in Input validation",
       });
     }
+
     next();
   },
 ];
