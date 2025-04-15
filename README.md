@@ -2,7 +2,7 @@
  
 This project implements an OTP (One-Time Password) verification system with rate limiting, built using Node.js, TypeScript, Express, Prisma, Redis, and Twilio.
 
-
+ 
 ## Features
 
 - **User Registration**: Users can register their mobile numbers.
